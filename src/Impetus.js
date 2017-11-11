@@ -149,7 +149,7 @@ export default class Impetus {
          * Executes the update function
          */
         function callUpdateCallback() {
-            updateCallback.call(sourceEl, targetX, targetY);
+            updateCallback.call(sourceEl, targetX, targetY, pointerId !== null, pointerActive);
         }
 
         /**
@@ -180,6 +180,24 @@ export default class Impetus {
          */
         function onDown(ev) {
             var event = normalizeEvent(ev);
+
+            // on iOS sometimes the pointerId is not cleared for some reason and the UI locks
+            // check to make sure that touch is still around otherwise allow this down
+            if (pointerActive && pointerId !== null && event.id !== null) {
+                var isStillActive = false;
+
+                for (var i = 0; i < ev.touches.length; i++) {
+                    var touch = ev.touches[i];
+
+                    isStillActive = isStillActive || touch.identifier === pointerId;
+                }
+
+                if (!isStillActive) {
+                    pointerActive = false;
+                    pointerId = null;
+                }
+            }
+
             if (!pointerActive && !paused) {
                 pointerActive = true;
                 decelerating = false;
@@ -204,8 +222,21 @@ export default class Impetus {
          * @param  {Object} ev Normalized event
          */
         function onMove(ev) {
-            ev.preventDefault();
             var event = normalizeEvent(ev);
+
+            var xDiff = Math.abs(event.x - pointerCurrentX);
+            var isTouch = pointerId !== null;
+            if (isTouch) {
+                if (xDiff > 5) {
+                    ev.preventDefault();
+                } else {
+                    // y movement for scrolling let it through
+                    // remove x movement for tracking
+                    // event.x = pointerCurrentX;
+                }
+            } else {
+                ev.preventDefault();
+            }
 
             if (pointerActive && event.id === pointerId) {
                 pointerCurrentX = event.x;
@@ -223,15 +254,20 @@ export default class Impetus {
             var event = normalizeEvent(ev);
 
             if (pointerActive && event.id === pointerId) {
-                stopTracking();
+                stopTracking(ev);
             }
         }
 
         /**
          * Stops movement tracking, starts animation
          */
-        function stopTracking() {
+        function stopTracking(ev) {
             pointerActive = false;
+
+            var event = normalizeEvent(ev);
+            if (event.id === pointerId) {
+                pointerId = null;
+            }
             addTrackingPoint(pointerLastX, pointerLastY);
             startDecelAnim();
 
